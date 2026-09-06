@@ -1,13 +1,9 @@
-import json
-
 from django.shortcuts import render
-from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from asgiref.sync import async_to_sync
 
 from .consumers_wrapper.post_consumers import get_post_consumer_instance
-from .consumers_wrapper.update_periodically_consumer import get_device_from_list_by_id
 import configparser
 
 config = configparser.ConfigParser()
@@ -15,15 +11,11 @@ config.read('config.ini')
 
 
 def index(request):
-  context = {
-    'google_maps_key': settings.GOOGLE_MAPS_API_KEY,
-    'server_address': config['server']['ip_groundstation_server']
-  }
-  return render(request, 'index.html', context=context)
+  return render(request, 'index.html')
 
 
 def create_new_dict(request_received):
-  ip = config['uav-simulator']['ip_uav_server']
+  ip = config['fallback']['default_uav_address']
 
   new_dict = {}
   if request_received.POST.get('id') != None:
@@ -38,6 +30,28 @@ def create_new_dict(request_received):
     new_dict['lng'] = float(request_received.POST.get('lng'))
   if request_received.POST.get('alt') != None:
     new_dict['alt'] = float(request_received.POST.get('alt'))
+  # Flight telemetry pushed by uav_api (gs_dev branch): speed, heading, battery.
+  if request_received.POST.get('ground_speed') != None:
+    new_dict['ground_speed'] = float(request_received.POST.get('ground_speed'))
+  if request_received.POST.get('air_speed') != None:
+    new_dict['air_speed'] = float(request_received.POST.get('air_speed'))
+  if request_received.POST.get('heading') != None:
+    new_dict['heading'] = float(request_received.POST.get('heading'))
+  if request_received.POST.get('battery_percent') != None:
+    new_dict['battery_percent'] = float(request_received.POST.get('battery_percent'))
+  if request_received.POST.get('battery_voltage') != None:
+    new_dict['battery_voltage'] = float(request_received.POST.get('battery_voltage'))
+  # Mode name, e.g. GUIDED / LOITER / RTL. uav_api sends the string "None"
+  # before the first heartbeat; that stays None here so the interface can show
+  # "unknown" rather than inventing a mode.
+  if request_received.POST.get('flight_mode') != None:
+    raw = request_received.POST.get('flight_mode')
+    new_dict['flight_mode'] = None if raw == 'None' else raw
+  # ready_to_arm arrives as the string "True"/"False", or "None" when uav_api
+  # has had no SYS_STATUS for 5s -- which must stay distinct from False.
+  if request_received.POST.get('ready_to_arm') != None:
+    raw = request_received.POST.get('ready_to_arm')
+    new_dict['ready_to_arm'] = None if raw == 'None' else (raw == 'True')
   if request_received.POST.get('device') != None:
     new_dict['device'] = request_received.POST.get('device')
   if request_received.POST.get('data') != None:
@@ -68,22 +82,3 @@ async def post_to_socket(request):
       ack['type'] = 103
 
   return JsonResponse(ack)
-
-@csrf_exempt
-def send_uav_ip(request):
-  # Receives a POST request with the ID of an uav
-  # Search the uav IP on the permanente devices list and send it back
-
-  if request.method == 'POST':
-    id = json.load(request)['id']
-  else:
-    print(f'No POST request {request.POST}')
-    id = 'all'
-  
-  device = get_device_from_list_by_id(id)
-  if id == 'all':
-    ip = config['uav-simulator']['ip_uav_server']
-  else:
-    ip = device[0]['ip']
-  
-  return JsonResponse({'ip': ip})

@@ -1,0 +1,6 @@
+-r requirements.txt
+
+# Runs the front-end suites in tests/frontend/: a V8 engine that executes
+# main.js and map.js against a stubbed DOM, so the browser logic can be tested
+# without a browser.
+mini-racer==0.14.1
