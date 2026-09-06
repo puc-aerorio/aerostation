@@ -1,25 +1,64 @@
 import aiohttp
 import asyncio
+import contextlib
 import json
 import configparser
 import io
 import base64
 from datetime import date, datetime
+from urllib.parse import urlencode
 from .update_periodically_consumer import get_device_from_list_by_id, append_device_to_persistant_list
 from channels.generic.websocket import AsyncWebsocketConsumer
 
 from ..utils.logger import Logger
 
 
+ALLOWED_METHODS = ('get', 'post', 'delete')
+
+# Emitted by the ground station itself (never by a drone) when an outbound
+# request fails. Without it a failed request becomes an unretrieved asyncio
+# task exception and disappears -- which matters most for polls, where a 404
+# is a routine outcome rather than a bug.
+GS_ERROR_TYPE = 900
+
+
+def parse_command_entry(command):
+  # "<endpoint>,<method>[,<param>...]" -> (endpoint, method, allowed_params)
+  # The endpoint is NOT stripped: a trailing slash is part of the contract.
+  parts = config['commands-list'][str(command)].split(',')
+  endpoint = parts[0]
+  method = parts[1].strip().lower() if len(parts) > 1 else 'get'
+  allowed = [p.strip() for p in parts[2:] if p.strip()]
+  return endpoint, method, allowed
+
+
+def build_url(device_ip, endpoint):
+  # device['ip'] is "host:port/". Strip only the IP's trailing slash and only
+  # the endpoint's leading one, so a trailing slash on the endpoint survives.
+  return "http://" + device_ip.rstrip('/') + '/' + endpoint.lstrip('/')
+
+
+def build_query(params, allowed):
+  # Whitelist: anything the command table does not name is dropped.
+  return {k: v for k, v in (params or {}).items()
+          if k in allowed and v is not None and v != ''}
+
+
+def poll_key(command, receiver_id, params):
+  # Keyed by identity rather than the old 28/29-30/31 parity convention, so
+  # e.g. a stdout tail and a stderr tail can poll concurrently.
+  return f"{command}|{receiver_id}|" + urlencode(sorted((params or {}).items()))
+
+
 class PostConsumer(AsyncWebsocketConsumer):
   # Websocket consumer that handles POST requests received.
   # The 'post_to_socket' VIEW receive the request, call 'receive_post' method from this class and send it to JS.
-  # Receive msgs from JS, with the 'receive' method and send it to the specific device(s) with HTTP request (POST or GET)
+  # Receive msgs from JS, with the 'receive' method and send it to the specific device(s) with HTTP request.
 
   def __init__(self) -> None:
       super().__init__()
-      self.async_tasks = []
-      self.keep_sending_tasks = {}
+      self.async_tasks = set()
+      self.polling_tasks = {}
 
   async def connect(self):
     # Called when websocket connection is required (when corresponding url is accessed).
@@ -30,184 +69,185 @@ class PostConsumer(AsyncWebsocketConsumer):
 
 
   async def disconnect(self, close_code):
-    # Called when websocket connection is closed.
-    for task in self.async_tasks:
+    # Called when websocket connection is closed. Cancellation is awaited:
+    # a bare .cancel() only schedules it, so without the gather the poll loops
+    # can outlive the socket they were reporting to.
+    tasks = list(self.async_tasks) + list(self.polling_tasks.values())
+    for task in tasks:
       task.cancel()
-    if len(self.keep_sending_tasks.keys()) > 0:
-      for task in self.keep_sending_tasks.values():
-        task.cancel()
+    if tasks:
+      await asyncio.gather(*tasks, return_exceptions=True)
+    self.async_tasks.clear()
+    self.polling_tasks.clear()
     print(f'Post websocket disconnected {close_code}')
 
 
-  async def send_post_specific_device(self, url, device_type, id, json_to_send):
-    # Send POST request to specific URL (representing a specific device)
-    async with aiohttp.ClientSession() as session:
-      print(f'Enviando: {json_to_send}')
-
-      # Logging the information to send
-      logger.log_info(source='gs', data=json_to_send, code_origin='send-post')
-
-      async with session.post(url, json=json_to_send) as resp:
-        response = await resp.json()
-        print(f'Django recebeu resposta do POST request: {response}')
-
-        # Logging the response
-        source = device_type + '-' + str(id)
-        logger.log_info(source=source, data=response, code_origin='send-post-response')
-        # Updating the interface with the response
-        await self.send(json.dumps(response))
+  def track(self, coro):
+    # Fire-and-forget a coroutine while keeping a reference (asyncio only holds
+    # a weak one) and discarding it on completion, so the set cannot grow
+    # unbounded over the life of the consumer.
+    task = asyncio.create_task(coro)
+    self.async_tasks.add(task)
+    task.add_done_callback(self.async_tasks.discard)
+    return task
 
 
-  async def upload_file_to_device(self, url, device_type, id, file_data):
+  async def send_to_ui(self, payload, gs_command=None):
+    # Stamp the frame with the command that produced it. uav_api's own numeric
+    # 'type' codes are deprecated upstream, so the interface dispatches on
+    # 'gs_command' instead and survives their removal.
+    if gs_command is not None and isinstance(payload, dict):
+      payload['gs_command'] = int(gs_command)
+    await self.send(json.dumps(payload))
+
+
+  async def send_request(self, method, url, device_type, id, json_body=None, params=None, gs_command=None):
+    # Single path for GET/POST/DELETE -- they differ only in verb.
+    if method not in ALLOWED_METHODS:
+      logger.log_info(source='gs', data=f'unsupported method {method} for {url}', code_origin='send-error')
+      return
+
+    kwargs = {}
+    if params:
+      kwargs['params'] = params
+    if method == 'post':
+      kwargs['json'] = json_body or {}
+      # A missing trailing slash makes uav_api 307 and aiohttp drop the body,
+      # which otherwise presents as a command that silently does nothing.
+      kwargs['allow_redirects'] = False
+
+    logger.log_info(source='gs', data=f'{method.upper()} {url} {params or {}}', code_origin=f'send-{method}')
+    try:
+      async with aiohttp.ClientSession(timeout=HTTP_TIMEOUT) as session:
+        async with session.request(method, url, **kwargs) as resp:
+          response = await resp.json(content_type=None)
+          logger.log_info(source=f'{device_type}-{id}', data=response, code_origin=f'send-{method}-response')
+          await self.send_to_ui(response, gs_command)
+    except asyncio.CancelledError:
+      raise
+    except Exception as e:
+      logger.log_except()
+      await self.send_to_ui(
+        {'type': GS_ERROR_TYPE, 'device': 'gs', 'id': id, 'url': url, 'error': str(e)},
+        gs_command,
+      )
+
+
+  async def upload_file_to_device(self, url, device_type, id, file_data, gs_command=None):
     # Upload file to a device through HTTP POST endpoint
-    print("Calling upload_file_to_device")
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(timeout=HTTP_TIMEOUT) as session:
       # Decode into a fresh local buffer for THIS request only. We must NOT
       # mutate the shared file_data dict: when "Send to all" is selected the
       # same dict is passed to every drone's upload task, and overwriting
       # file_data["content"] with an already-consumed BytesIO makes every
       # upload after the first one fail silently.
       content_stream = io.BytesIO(base64.b64decode(file_data["content"]))
-      print(f'Enviando arquivo: {file_data["filename"]}')
 
-      # Logging the information to send
       data = aiohttp.FormData()
       data.add_field('file', content_stream, filename=file_data["filename"], content_type=file_data["type"])
 
       logger.log_info(source='gs', data=file_data["filename"], code_origin='upload-post')
-      print(f"Sending http request to url {url}")
-      async with session.post(url, data=data) as resp:
-        response = await resp.json()
-        print(f'Django recebeu resposta do POST request: {response}')
-
-        # Logging the response
-        source = device_type + '-' + str(id)
-        logger.log_info(source=source, data=response, code_origin='upload-post-response')
-        # Updating the interface with the response
-        await self.send(json.dumps(response))
-
-  async def send_get_specific_device(self, url, id, device_type):
-    # Send GET request to specific URL (representing a specific device), wait for response and send to JS via socket
-    async with aiohttp.ClientSession() as session:
-      logger.log_info(source='gs', data=url, code_origin='send-get')
-      
-      async with session.get(url) as resp:
-        response_from_device = await resp.json(content_type=None)
-        print(f'Django recebeu resposta do GET request: {response_from_device}')
-
-        # Logging the GET request response and original information
-        source = device_type + '-' + str(id)
-        logger.log_info(source=source, data=response_from_device, code_origin='send-get-response')
-        # Updating the interface with the response
-        await self.send(json.dumps(response_from_device))
+      try:
+        async with session.post(url, data=data) as resp:
+          response = await resp.json(content_type=None)
+          logger.log_info(source=f'{device_type}-{id}', data=response, code_origin='upload-post-response')
+          await self.send_to_ui(response, gs_command)
+      except asyncio.CancelledError:
+        raise
+      except Exception as e:
+        logger.log_except()
+        await self.send_to_ui(
+          {'type': GS_ERROR_TYPE, 'device': 'gs', 'id': id, 'url': url, 'error': str(e)},
+          gs_command,
+        )
 
 
-  async def keep_sending(self, command, device_receiver_id):
-    # Get from persistant list all the registred devices
-    device_to_send_list = get_device_from_list_by_id(device_receiver_id)
-    while True:
-      device_tasks = []
-      for device in device_to_send_list:
-        # Get the specific command path of the endpoint address
-        command_path_list = config['commands-list'][command].split(',')
-        endpoint = command_path_list[0]
-        url = "http://" + device['ip'] + endpoint
+  async def poll_loop(self, key, command, receiver_id, params, interval):
+    # Everything keep_sending lacked: a sleep, per-tick error isolation, and a
+    # device list re-resolved every tick so a drone that registers later is
+    # picked up instead of being missed forever.
+    endpoint, method, allowed = parse_command_entry(command)
+    query = build_query(params, allowed)
+    try:
+      while True:
+        started = asyncio.get_event_loop().time()
+        for device in get_device_from_list_by_id(receiver_id):
+          url = build_url(device['ip'], endpoint)
+          # Awaited in sequence, not gathered: a slow drone must not let
+          # requests stack up behind it.
+          await self.send_request(method, url, device['device'], str(device['id']),
+                                  None, query, command)
+        elapsed = asyncio.get_event_loop().time() - started
+        await asyncio.sleep(max(MIN_POLL_INTERVAL, interval - elapsed))
+    except asyncio.CancelledError:
+      raise
+    finally:
+      self.polling_tasks.pop(key, None)
 
-        # Create the GET request task
-        task = asyncio.create_task(self.send_get_specific_device(url, device['id'], device['device']))
-        device_tasks.append(task)
-      await asyncio.gather(*device_tasks, return_exceptions=True)
 
-  async def treat_checkbox_cmds(self, command, device_receiver_id):
-    command = str(command)
-    # Auxiliary function to check and execute special command to keep the order to cancel a mission or not
-    cmds_to_keep_sending = [cmd for cmd in config['checkbox-commands']['keep_sending'].split(",")]
-    cmds_to_stop_sending = [cmd for cmd in config['checkbox-commands']['stop_sending'].split(",")]
+  async def start_polling(self, command, receiver_id, params, interval):
+    key = poll_key(command, receiver_id, params)
+    if key in self.polling_tasks:
+      return  # idempotent: re-opening a panel must not stack a second loop
+    try:
+      interval = float(interval)
+    except (TypeError, ValueError):
+      interval = DEFAULT_POLL_INTERVAL
+    interval = max(MIN_POLL_INTERVAL, min(interval, MAX_POLL_INTERVAL))
+    self.polling_tasks[key] = asyncio.create_task(
+      self.poll_loop(key, command, receiver_id, params, interval))
 
-    if command in cmds_to_stop_sending:
-      # Checkbox to cancel all missions is not checked anymore
-      command_to_stop = str(int(command)-1) # Getting the corresponding 'keep sending' command
-      print("Stopping to keep sending command:", command_to_stop)
-      if command_to_stop in self.keep_sending_tasks.keys():
-        self.keep_sending_tasks[command_to_stop].cancel()
-        try:
-          await self.keep_sending_tasks[command_to_stop]
-        except asyncio.CancelledError:
-          pass
-        del self.keep_sending_tasks[command_to_stop]
-        print("Current keep_sending_tasks:",self.keep_sending_tasks.keys())
-    elif command in cmds_to_keep_sending:
-      # Checkbox to cancel all missions is checked. Creating a task to keep sending command
-      self.keep_sending_tasks[command] = asyncio.create_task(self.keep_sending(command, device_receiver_id))
+
+  async def stop_polling(self, command, receiver_id, params):
+    task = self.polling_tasks.pop(poll_key(command, receiver_id, params), None)
+    if task is not None:
+      task.cancel()
+      with contextlib.suppress(asyncio.CancelledError):
+        await task
 
 
   async def send_via_http(self, text_data):
-    # The command received via socket will be processed
-    # There is two types of command, trigged by a checkbox button and a regular button
-    # The button type will be checked and treated accordingly 
+    # The command received via socket is dispatched on 'button_type':
+    # upload (multipart), poll_start / poll_stop (recurring), or a one-shot
+    # request whose method comes from the command table in config.ini.
     received_json = json.loads(text_data)
 
-    button_type = received_json['button_type']
-    device_receiver_id = str(received_json['receiver'])
+    button_type = received_json.get('button_type', 'default')
+    device_receiver_id = str(received_json.get('receiver'))
     command = str(received_json['type'])
-    print("button_type", button_type)
-    # It'll search the 'persistent device list' for available device, with matching id,
-    # Or get all persistent list if device_receiver_id is 'all'.
+    params = received_json.get('params') or {}
+
+    if button_type == 'poll_start':
+      await self.start_polling(command, device_receiver_id, params,
+                               received_json.get('interval', DEFAULT_POLL_INTERVAL))
+      return
+    if button_type == 'poll_stop':
+      await self.stop_polling(command, device_receiver_id, params)
+      return
+
+    endpoint, method, allowed = parse_command_entry(command)
+    query = build_query(params, allowed)
     device_to_send_list = get_device_from_list_by_id(device_receiver_id)
 
-    
-    if button_type == "checkbox":
-      # Checkbox commands are treat differently. treat_checkbox_cmds() have the logic to handle it
-      await self.treat_checkbox_cmds(int(command), device_receiver_id)
-    elif button_type == "upload":
-      print("Handling upload command")
-      # Upload commands are treated differently. The data is sent to the device via POST request
-      for device in device_to_send_list:
-        # Building the device ip to send the HTTP request
-        ip = "http://" + device['ip']
-        id = str(device['id'])
+    for device in device_to_send_list:
+      url = build_url(device['ip'], endpoint)
+      id = str(device['id'])
 
-        # Getting inside config.ini the "endpoint,type_of_request", based on the command (int)
-        command_path_list = config['commands-list'][command].split(',')
-        endpoint = command_path_list[0]
-        type_of_request = 'post' # Upload commands are always a POST request
-        url = ip + endpoint
-
-        json_to_send = received_json["data"]
-        task = asyncio.create_task(self.upload_file_to_device(url, device['device'], id, json_to_send))
-        self.async_tasks.append(task)
-    else:
-      print("running regular command")
-      # Regular button commands can be a POST or GET request
-      # The mapping is done inside congig.ini, where it gets the command (int) and returns endpoint,type_of_request (string)
-      for device in device_to_send_list:
-        # Building the device ip to send the HTTP request
-        ip = "http://" + device['ip']
-        id = str(device['id'])
-
-        # Getting inside config.ini the "endpoint,type_of_request", based on the command (int)
-        command_path_list = config['commands-list'][command].split(',')
-        endpoint = command_path_list[0]
-        type_of_request = command_path_list[1]
-        url = ip + endpoint
-        print("command", command)
-        print("endpoint", endpoint)
-        json_to_send = received_json["data"]
-        if type_of_request == 'get':
-          #GET request
-          task = asyncio.create_task(self.send_get_specific_device(url, id, device['device']))
-        else:
-          # POST request
-          task = asyncio.create_task(self.send_post_specific_device(url, device['device'], id, json_to_send))
-        self.async_tasks.append(task)
+      if button_type == 'upload':
+        self.track(self.upload_file_to_device(url, device['device'], id,
+                                              received_json['data'], command))
+      else:
+        self.track(self.send_request(method, url, device['device'], id,
+                                     received_json.get('data'), query, command))
 
 
   async def receive(self, text_data):
     # Receive msg (text_data) from socket and call 'send_via_http' method to handle it
-    try: 
+    try:
       await self.send_via_http(text_data)
-    except:
+    except Exception:
       logger.log_except()
+
   async def receive_post(self, data):
     # Called from 'post_to_socket' view, when a POST arrives from a device
     data['method'] = 'post'
@@ -217,11 +257,9 @@ class PostConsumer(AsyncWebsocketConsumer):
     append_device_to_persistant_list(data)
 
     source = data['device'] + '-' + str(data['id'])
-    if "type" in data:
-      print(f"Type recebido: {data['type']}")
     logger.log_info(source=source, data=data, code_origin='receive-info')
     try:
-      await self.send(json.dumps(data)) # Send to JS via socket
+      await self.send(json.dumps(data))  # Send to JS via socket
     except Exception:
       logger.log_except()
 
@@ -239,21 +277,10 @@ def get_time_now():
 
 
 def json_serializer(obj):
-  # Function to help formatting 
+  # Function to help formatting
   if isinstance(obj, (datetime, date)):
     return obj.isoformat()
   raise TypeError ("Type %s not serializable" % type(obj))
-
-
-def replicate_dict_new_id(id, json_to_send):
-  # Create a new dict changing it's 'ID' key
-  new_dict = {}
-  for key, item in json_to_send.items():
-    if key == 'id':
-      new_dict[key] = id
-    else:
-      new_dict[key] = item
-  return new_dict
 # End of Auxiliary functions
 # -------------------
 
@@ -261,6 +288,15 @@ def replicate_dict_new_id(id, json_to_send):
 # --- Pre-process to get .ini info ---
 config = configparser.ConfigParser()
 config.read('config.ini')
+
+MIN_POLL_INTERVAL = float(config['polling']['min_interval'])
+MAX_POLL_INTERVAL = float(config['polling']['max_interval'])
+DEFAULT_POLL_INTERVAL = float(config['polling']['default_interval'])
+
+HTTP_TIMEOUT = aiohttp.ClientTimeout(
+  total=float(config['http']['request_timeout']),
+  connect=float(config['http']['connect_timeout']),
+)
 # --- End of pre-processing ---
 
 post_consumer_instance = None

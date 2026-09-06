@@ -1,5 +1,4 @@
 from django.shortcuts import render
-from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from asgiref.sync import async_to_sync
@@ -12,11 +11,7 @@ config.read('config.ini')
 
 
 def index(request):
-  context = {
-    'google_maps_key': settings.GOOGLE_MAPS_API_KEY,
-    'server_address': config['server']['ip_groundstation_server']
-  }
-  return render(request, 'index.html', context=context)
+  return render(request, 'index.html')
 
 
 def create_new_dict(request_received):
@@ -46,6 +41,17 @@ def create_new_dict(request_received):
     new_dict['battery_percent'] = float(request_received.POST.get('battery_percent'))
   if request_received.POST.get('battery_voltage') != None:
     new_dict['battery_voltage'] = float(request_received.POST.get('battery_voltage'))
+  # Mode name, e.g. GUIDED / LOITER / RTL. uav_api sends the string "None"
+  # before the first heartbeat; that stays None here so the interface can show
+  # "unknown" rather than inventing a mode.
+  if request_received.POST.get('flight_mode') != None:
+    raw = request_received.POST.get('flight_mode')
+    new_dict['flight_mode'] = None if raw == 'None' else raw
+  # ready_to_arm arrives as the string "True"/"False", or "None" when uav_api
+  # has had no SYS_STATUS for 5s -- which must stay distinct from False.
+  if request_received.POST.get('ready_to_arm') != None:
+    raw = request_received.POST.get('ready_to_arm')
+    new_dict['ready_to_arm'] = None if raw == 'None' else (raw == 'True')
   if request_received.POST.get('device') != None:
     new_dict['device'] = request_received.POST.get('device')
   if request_received.POST.get('data') != None:
@@ -76,4 +82,3 @@ async def post_to_socket(request):
       ack['type'] = 103
 
   return JsonResponse(ack)
-

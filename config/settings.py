@@ -27,17 +27,27 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env("SECRET_KEY")
 
-GOOGLE_MAPS_API_KEY = env("GOOGLE_MAPS_API_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
+# Django's SecurityMiddleware defaults this to 'same-origin', which strips the
+# Referer header from every CROSS-origin request -- including map tiles. The
+# OpenStreetMap tile servers reject refererless requests under their usage
+# policy, serving an "Access blocked" image instead of the map. This value is
+# what browsers themselves default to: it sends only the origin cross-origin
+# (never the path), and nothing at all when downgrading HTTPS to HTTP.
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+
 
 # Application definition
 
 INSTALLED_APPS = [
+    # channels 4 moved the ASGI-aware runserver into daphne, and it must come
+    # before staticfiles to take over the runserver command.
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
