@@ -1,7 +1,7 @@
 import configparser
 from django.urls import path
 
-from .views import index, post_to_socket, send_uav_ip
+from .views import index, post_to_socket
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -12,6 +12,5 @@ path_receive_info = config['post']['path_receive_info']
 
 urlpatterns = [
     path('', index),
-    path('get-uav-ip/', send_uav_ip),
     path(path_receive_info, post_to_socket),
 ]

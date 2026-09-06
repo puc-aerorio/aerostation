@@ -1,5 +1,3 @@
-import json
-
 from django.shortcuts import render
 from django.conf import settings
 from django.http import JsonResponse
@@ -7,7 +5,6 @@ from django.views.decorators.csrf import csrf_exempt
 from asgiref.sync import async_to_sync
 
 from .consumers_wrapper.post_consumers import get_post_consumer_instance
-from .consumers_wrapper.update_periodically_consumer import get_device_from_list_by_id
 import configparser
 
 config = configparser.ConfigParser()
@@ -23,7 +20,7 @@ def index(request):
 
 
 def create_new_dict(request_received):
-  ip = config['uav-simulator']['ip_uav_server']
+  ip = config['fallback']['default_uav_address']
 
   new_dict = {}
   if request_received.POST.get('id') != None:
@@ -80,21 +77,3 @@ async def post_to_socket(request):
 
   return JsonResponse(ack)
 
-@csrf_exempt
-def send_uav_ip(request):
-  # Receives a POST request with the ID of an uav
-  # Search the uav IP on the permanente devices list and send it back
-
-  if request.method == 'POST':
-    id = json.load(request)['id']
-  else:
-    print(f'No POST request {request.POST}')
-    id = 'all'
-  
-  device = get_device_from_list_by_id(id)
-  if id == 'all':
-    ip = config['uav-simulator']['ip_uav_server']
-  else:
-    ip = device[0]['ip']
-  
-  return JsonResponse({'ip': ip})

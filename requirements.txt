@@ -1,0 +1,13 @@
+# AeroStation runtime dependencies.
+# Direct dependencies only -- asgiref comes with Django, Twisted/autobahn with
+# daphne. Pinned to the versions this has actually been run against.
+Django==5.2.17
+channels==4.3.2
+daphne==4.2.3
+aiohttp==3.14.3
+django-environ==0.14.0
+
+# Serial/ESP32 path (connections/serial_connector.py). Inherited, off by
+# default via [serial] serial_available, but still imported at startup.
+pyserial==3.5
+aioserial==1.3.1
