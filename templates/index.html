@@ -4,100 +4,142 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet"  href="{%  static  'connections/css/connection.css'  %}">
-  <link rel="stylesheet" href="https://fonts.sandbox.google.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-  <title>Ground station</title>
-  <script src="{% static 'connections/js/gmap.js' %}"></script>
+  <title>AeroStation</title>
+  <link rel="icon" type="image/png" href="{% static 'connections/images/aerorio-favicon.png' %}">
+  <link rel="stylesheet" href="{% static 'connections/vendor/leaflet/leaflet.css' %}">
+  <link rel="stylesheet" href="{% static 'connections/css/connection.css' %}">
 </head>
-  <body>
-    <div class="page-container grid-template-area">
-      <div class="section-container map-container">
-        <div id="map"></div>
-      </div>
-      <div class="section-container command-buttons">
-        <div class="tab-bar">
-          <button type="button" class="tab-button active" id="tab-btn-controls" onclick="switchTab('controls')">Controls</button>
-          <button type="button" class="tab-button" id="tab-btn-drones" onclick="switchTab('drones')">Drones</button>
+<body>
+  <div class="page-container">
+
+    <aside class="side-panel">
+
+      <header class="brand">
+        <img class="brand-logo" src="{% static 'connections/images/aerorio-logo.png' %}" alt="AeroRio UAV Design">
+        <span class="brand-name">AeroStation</span>
+      </header>
+
+      <section class="panel telemetry">
+        <h2 class="panel-title">Telemetry</h2>
+
+        <div class="drone-status">
+          <span class="status-dot" id="status-dot"></span>
+          <span class="status-label" id="status-label">Waiting for drone</span>
         </div>
-        <div class="tab-pane" id="tab-controls">
-        <div class="select-container">
-          <p>Select the device</p>
-          <select class="select-device" id="select-device">
-            <option value="all">Send to all</option>
+        <div class="drone-headline">
+          <span class="drone-id" id="drone-id">&mdash;</span>
+          <span class="flight-mode" id="tm-mode" title="Current flight mode">&mdash;</span>
+        </div>
+
+        <div class="telemetry-grid">
+          <div class="tm-field"><span class="tm-label">Latitude</span><span class="tm-value" id="tm-lat">&mdash;</span></div>
+          <div class="tm-field"><span class="tm-label">Longitude</span><span class="tm-value" id="tm-lng">&mdash;</span></div>
+          <div class="tm-field"><span class="tm-label">Alt (rel. home)</span><span class="tm-value" id="tm-alt">&mdash;</span></div>
+          <div class="tm-field"><span class="tm-label">Heading</span><span class="tm-value" id="tm-heading">&mdash;</span></div>
+          <div class="tm-field"><span class="tm-label">Ground speed</span><span class="tm-value" id="tm-gspd">&mdash;</span></div>
+          <div class="tm-field"><span class="tm-label">Air speed</span><span class="tm-value" id="tm-aspd">&mdash;</span></div>
+          <div class="tm-field"><span class="tm-label">Battery</span><span class="tm-value" id="tm-battery">&mdash;</span></div>
+          <div class="tm-field"><span class="tm-label">Ready to arm</span><span class="tm-value" id="tm-arm">&mdash;</span></div>
+        </div>
+
+        <div class="link-status" id="link-status">Ground station: connecting</div>
+      </section>
+
+      <section class="panel commands">
+        <h2 class="panel-title">Commands</h2>
+
+        <div class="cmd-group">
+          <span class="cmd-group-label">Flight</span>
+          <button class="button" id="arm" type="button">Arm</button>
+          <div class="cmd-row">
+            <button class="button" id="takeoff" type="button">Takeoff</button>
+            <input class="alt-input" id="takeoff-alt" type="number" min="1" max="500" step="1" value="15" aria-label="Takeoff altitude in meters">
+            <span class="unit">m</span>
+          </div>
+          <div class="cmd-row">
+            <button class="button button-danger" id="land" type="button">Land</button>
+            <button class="button button-danger" id="rtl" type="button">RTL</button>
+          </div>
+          <div class="cmd-row">
+            <button class="button button-danger" id="brake" type="button">Brake</button>
+            <button class="button" id="guided" type="button">Guided</button>
+          </div>
+        </div>
+
+        <div class="cmd-group">
+          <span class="cmd-group-label">Navigation</span>
+          <button class="button" id="goto-arm" type="button" aria-pressed="false">Click map to fly</button>
+          <div class="cmd-row">
+            <span class="unit">Altitude</span>
+            <input class="alt-input" id="goto-alt" type="number" min="0" max="10000" step="1" value="15" aria-label="Go-to altitude in meters above home">
+            <span class="unit">m</span>
+          </div>
+          <label class="checkbox-row">
+            <input type="checkbox" id="goto-look"> Face travel direction
+          </label>
+          <p class="cmd-hint" id="goto-hint" hidden>Click the map to choose a destination.</p>
+          <button class="button" id="goto-clear" type="button" hidden>Clear target</button>
+        </div>
+
+        <div class="cmd-group">
+          <span class="cmd-group-label">Read position</span>
+          <div class="cmd-row">
+            <button class="button" id="position-gps" type="button">GPS</button>
+            <button class="button" id="position-ned" type="button">NED</button>
+          </div>
+        </div>
+      </section>
+
+    </aside>
+
+    <main class="map-container">
+      <div id="map"></div>
+    </main>
+
+    <section class="panel mission">
+      <div class="mission-bar">
+        <h2 class="panel-title">Mission</h2>
+
+        <label for="upload" class="button upload-label" id="upload-label">Upload script</label>
+        <input id="upload" type="file" accept=".py">
+        <span class="upload-filename" id="upload-filename"></span>
+        <button class="button" id="submit-file" type="button" disabled>Send</button>
+
+        <span class="mission-sep"></span>
+
+        <select class="select-script" id="select-script">
+          <option value="" disabled selected>Select a script</option>
+        </select>
+        <button class="button button-icon" id="refresh-file-list" type="button" title="Refresh script list">&#10574;</button>
+
+        <button class="button button-run" id="execute" type="button" disabled>&#9654; Run</button>
+        <button class="button button-danger" id="stop-mission" type="button" disabled>&#9632; Stop</button>
+        <button class="button button-danger" id="clear-scripts" type="button">&#10005; Clear all</button>
+      </div>
+
+      <div class="mission-status">
+        <span class="status-dot" id="mission-dot"></span>
+        <span id="mission-status-text">Idle &mdash; no mission running</span>
+      </div>
+
+      <div class="drawer">
+        <button class="drawer-toggle" id="drawer-toggle" type="button" aria-expanded="false">
+          <span class="drawer-caret" id="drawer-caret">&#9654;</span> Mission output
+        </button>
+        <div class="drawer-controls">
+          <select class="select-stream" id="select-stream">
+            <option value="out" selected>stdout</option>
+            <option value="err">stderr</option>
           </select>
         </div>
-        <div class="buttons-set-container">
-          <p>Get Location</p>
-          <input class="button" id="position-gps" type="button" value="GPS Position">
-          <input class="button" id="position-ned" type="button" value="NED Position">
-        </div>
-        <div class="buttons-set-container">
-          <p>Flight Commands</p>
-          <input class="button" id="arm" type="button" value="Arm">
-          <input class="button" id="takeoff" type="button" value="Takeoff">
-          <div class="checkbox-container">
-            <input type="checkbox" name="abort-all-checkbox" id="land" onclick="checkLand(this)" class="custom-checkbox"/>
-            <label for="land" class="label">Land</label>
-          </div>
-          <div class="checkbox-container">
-            <input type="checkbox" name="abort-all-checkbox" id="rtl" onclick="checkRtl(this)" class="custom-checkbox"/>
-            <label for="rtl" class="label">RTL</label>
-          </div>
-        </div>
-          <form>
-            <div class="buttons-set-container">
-              <p>Manage Scripts</p>
-              <label for="upload" class="custom-upload" id="custom-input-label">
-                <span class="material-symbols-outlined" id="input-icon">
-                  upload_file
-                </span>
-                Upload Script
-              </label>
-              <input id="upload" type="file">
-              <label for="submit-file" class="custom-submit-file-disabled" id="submit-label">Submit Script</label>
-              <input type="submit" id="submit-file" disabled>
-            </div>
-          </form>
-        <div class="buttons-set-container">
-          <p>Execute Scripts</p>
-          <div>
-            <select class="select-script">
-              <option value="" disabled selected>Select a script</option>
-            </select>
-            <input class="button" id="refresh-file-list" type="button" value="⭮">
-          </div>
-          <input class="button" id="execute" type="button" value="Execute Script">
-        </div>
-        <div class="buttons-set-container">
-          <p>Configuration</p>
-          <div class="checkbox-container">
-            <input type="checkbox" name="scroll-checkbox" id="scroll" onclick="checkScroll(this)" class="custom-checkbox" checked />
-            <label for="scroll" class="label">Auto Scroll</label>
-          </div>
-        </div>
-        <div class="connection-status">
-          <div id="ip-connected"></div>
-          <div id="ip-disconnected"></div>
-        </div>
-        </div>
-        <div class="tab-pane hidden" id="tab-drones">
-          <div id="drone-info-list"></div>
-        </div>
+        <pre class="drawer-body" id="mission-output" hidden>No mission output yet.</pre>
       </div>
-      <div class="section-container log" id="logs">
-        <div id="actions-logs"></div>
-      </div>
-    </div>
+    </section>
 
-    <script
-      src="https://maps.googleapis.com/maps/api/js?key={{google_maps_key}}&callback=gmap.initMap&libraries=&v=weekly"
-      async
-    ></script>
-  </body>
-  <script>
-    var serverAddress = "{{server_address}}";
-  </script>
+  </div>
+
+  <script src="{% static 'connections/vendor/leaflet/leaflet.js' %}"></script>
+  <script src="{% static 'connections/js/map.js' %}"></script>
   <script src="{% static 'connections/js/main.js' %}"></script>
-
 </body>
 </html>

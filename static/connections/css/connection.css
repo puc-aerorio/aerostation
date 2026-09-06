@@ -1,439 +1,414 @@
+/* AeroStation — AeroRio UAV Design ground station.
+   Palette: neutral dark slate, accented with the logo's brand blue (#0071ba,
+   lifted to #2a9bea for legibility on dark). */
 :root {
-  --primary-color: #ff4655;
-  --white-color: #ece8e1;
-  --green-color: #46ff7e;
+  --primary-color: #2a9bea;
+  --primary-deep: #0071ba;
+  --white-color: #e8eaed;
+  --muted-color: #9aa3ad;
+  --green-color: #3ddc84;
+  --amber-color: #f2b134;
+  --red-color: #ff5a5f;
   --light-gray-color: #eee;
-  --dark-gray-color: #424242;
-  --background-color: #0f1923;
-  --border-color: #424242;
-  --border-width: 2px;
+  --dark-gray-color: #5a6470;
+  --background-color: #12161c;
+  --panel-color: #171c24;
+  --raised-color: #1e242e;
+  --border-color: #2a323d;
+  --border-width: 1px;
 }
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
 html, body {
   height: 100%;
   background-color: var(--background-color);
   color: var(--white-color);
-  font-size: 20px;
+  font-family: "Segoe UI", Roboto, system-ui, -apple-system, sans-serif;
+  font-size: 14px;
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+button, input, select { font-family: inherit; }
 
-.page-container{
+/* --- page grid: fixed side panel, map above the mission panel --- */
+.page-container {
   display: grid;
   height: 100vh;
-  grid-template-columns: 1.6fr 0.4fr;
-  grid-template-rows: 1.5fr 0.5fr;
-}
-
-.grid-template-area {
+  grid-template-columns: 340px 1fr;
+  grid-template-rows: 1fr auto;
   grid-template-areas:
-  "map btns"
-  "log btns"
-  ;
+    "side map"
+    "side mission";
 }
 
-#map {
-  height: 100%;
-}
-
-.map-container {
-  grid-area: map;
-}
-
-.section-container {
-  border: var(--border-width) solid var(--border-color);
-}
-
-.command-buttons {
-  overflow-y: scroll;
-  grid-area: btns;
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-.command-buttons::-webkit-scrollbar {
-  display: none;
-}
-
-.select-container {
-  margin-top: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-}
-
-.select-device {
-  font-size: 16px;
-  cursor: pointer;
-  margin-top: 10px;
-  padding: 5px;
-  width: 16vw;
-  height: 40px;
-
-  background: var(--background-color);
-  color: var(--white-color);
-  border: 2px solid var(--primary-color);
-}
-
-.select-device:focus {
-  outline: none;
-}
-
-.select-script {
-  font-size: 16px;
-  cursor: pointer;
-  margin-top: 10px;
-  padding: 5px;
-  width: 12vw;
-  height: 40px;
-
-  background: var(--background-color);
-  color: var(--white-color);
-  border: 2px solid var(--primary-color);
-}
-
-.select-script:focus {
-  outline: none;
-}
-
-.buttons-set-container {
-  padding: 20px 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-}
-
-.buttons-row-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-.button {
-  cursor: pointer;
-  font-size: 16px;
-  margin-top: 10px;
-  background: var(--background-color);
-  color: var(--white-color);
-  width: 16vw;
-  height: 40px;
-  padding: 8px;
-  border: 3px solid var(--white-color);
-  box-shadow: inset 0 0 0 0 var(--primary-color);
-  transition: 100ms linear;
-}
-
-.button:hover {
-  /*box-shadow: inset 16vw 0 0 0 var(--primary-color);*/
-  border: 3px solid var(--primary-color);
-}
-
-.button:active {
-  border: 3px solid var(--white-color);
-}
-
-.button#refresh-file-list {
-  width: 4vw;
-  margin-top: 0px;
-  padding-top: 6px;
-}
-
-.button#refresh-file-list:hover {
-  /*box-shadow: inset 16vw 0 0 0 var(--primary-color);*/
-  border: 2px solid var(--primary-color);
-}
-
-.button#refresh-file-list:active {
-  border: 2px solid var(--white-color);
-}
-
-input[type~="file"] {
-  display: none;
-}
-
-input[type~="submit"] {
-  display: none;
-}
-
-.custom-upload {
-  cursor: pointer;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  position: relative;
-  font-size: 18px;
-  margin-top: 10px;
-  background: var(--background-color);
-  color: var(--white-color);
-  width: 16vw;
-  height: 40px;
-  padding: 8px;
-  border: 3px solid var(--white-color);
-  box-shadow: inset 0 0 0 0 var(--primary-color);
-  transition: 100ms linear;
-}
-
-.custom-upload span {
-  color: var(--dark-gray-color);
-  position: absolute;
-  left: 4%;
-}
-
-.custom-upload:hover {
-  /*box-shadow: inset 16vw 0 0 0 var(--primary-color);*/
-  border: 3px solid var(--primary-color);
-}
-
-.custom-upload:active {
-  border: 3px solid var(--white-color);
-}
-
-.material-symbols-outlined {
-  font-variation-settings:
-  'FILL' 0,
-  'wght' 400,
-  'GRAD' 0,
-  'opsz' 48
-}
-
-.custom-submit-file {
-  cursor: pointer;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 18px;
-  margin-top: 10px;
-  background: var(--background-color);
-  color: var(--white-color);
-  width: 16vw;
-  height: 40px;
-  padding: 8px;
-  border: 3px solid var(--white-color);
-  box-shadow: inset 0 0 0 0 var(--primary-color);
-  transition: 100ms linear;
-}
-
-.custom-submit-file-disabled {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 18px;
-  margin-top: 10px;
-  background: var(--background-color);
-  color: var(--dark-gray-color);
-  width: 16vw;
-  height: 40px;
-  padding: 8px;
-  border: 3px solid var(--dark-gray-color);
-  box-shadow: inset 0 0 0 0 var(--primary-color);
-  transition: 100ms linear;
-}
-
-.custom-submit-file:hover {
-  /*box-shadow: inset 16vw 0 0 0 var(--primary-color);*/
-  border: 3px solid var(--primary-color);
-}
-
-.custom-submit-file:active {
-  border: 3px solid var(--white-color);
-}
-
-.log {
-  font-size: 18px;
+.side-panel {
+  grid-area: side;
   overflow-y: auto;
-  grid-area: log;
+  background: var(--panel-color);
+  border-right: var(--border-width) solid var(--border-color);
+  display: flex;
+  flex-direction: column;
 }
 
-#actions-logs {
-  color: var(--primary-color);
-  margin-top: 10px;
+.map-container { grid-area: map; min-height: 0; }
+#map { height: 100%; width: 100%; background: var(--background-color); }
+
+.mission {
+  grid-area: mission;
+  background: var(--panel-color);
+  border-top: var(--border-width) solid var(--border-color);
 }
 
-.json-sent {
-  padding: 10px;
-}
-
-.json-received {
-  padding: 10px;
-  color: var(--white-color);
-}
-
-.connection-status {
-  margin: 20px 10% 20px 10%;
-  padding: 30px;
-  border: solid 3px var(--white-color);
+/* --- brand --- */
+.brand {
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 8px;
-}
-
-#ip-connected {
-  color: var(--green-color);
-}
-
-#ip-disconnected {
-  color: var(--primary-color);
-}
-
-.checkbox-container {
-  cursor: pointer;
-  font-size: 18px;
-  margin-top: 10px;
-  width: 16vw;
-  height: 40px;
-  border: 3px solid var(--white-color);
-  position: relative;
-}
-
-.label {
-  cursor: pointer;
-  position: absolute;
-  text-align: center;
-  padding-top: 6px;
-  left: 15%;
-  height: 100%;
-  width: 80%;
-}
-
-.custom-checkbox {
-  cursor: pointer;
-  -webkit-appearance: none;
-  appearance: none;
-  background-color: var(--light-gray-color);
-  border: 3px solid var(--primary-color);
-  height: 100%;
-  width: 20%;
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
-.custom-checkbox:checked {
-	background-color: var(--primary-color);
-  border-right: 3px solid var(--white-color);
-	color: var(--white-color);
-}
-
-.custom-checkbox:checked:after {
-	content: '\2714';
-	font-size: 12px;
-	position: absolute;
-	top: 50%;
-	left: 50%;
-  transform: translate(-50%, -50%);
-	color: var(--white-color);
-}
-
-/* --- Tabs (right panel) ------------------------------------------------- */
-.tab-bar {
-  display: flex;
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: var(--background-color);
+  gap: 10px;
+  padding: 16px 18px;
   border-bottom: var(--border-width) solid var(--border-color);
 }
 
-.tab-button {
-  flex: 1;
-  cursor: pointer;
-  font-size: 16px;
-  padding: 14px 0;
-  background: var(--background-color);
-  color: var(--white-color);
-  border: none;
-  border-bottom: 3px solid transparent;
-  transition: 100ms linear;
+.brand-logo { width: 130px; height: auto; display: block; }
+
+.brand-name {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted-color);
+  border-left: 1px solid var(--border-color);
+  padding-left: 10px;
 }
 
-.tab-button:hover {
+/* --- panels --- */
+.panel { padding: 16px 18px; }
+.telemetry { border-bottom: var(--border-width) solid var(--border-color); }
+
+.panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-color);
+  margin-bottom: 12px;
+}
+
+/* --- telemetry --- */
+.drone-status { display: flex; align-items: center; gap: 8px; }
+
+.status-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--dark-gray-color);
+  flex: none;
+}
+.status-dot.status-active   { background: var(--green-color); box-shadow: 0 0 8px rgba(61,220,132,.55); }
+.status-dot.status-on_hold  { background: var(--amber-color); box-shadow: 0 0 8px rgba(242,177,52,.55); }
+.status-dot.status-inactive { background: var(--red-color); }
+
+.status-label { font-size: 12px; color: var(--muted-color); text-transform: capitalize; }
+
+.drone-headline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+
+.drone-id {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* Flight mode is the state an operator re-checks constantly, so it sits beside
+   the aircraft id rather than among the numeric readouts. */
+.flight-mode {
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  padding: 3px 8px;
+  border: 1px solid var(--primary-color);
+  border-radius: 3px;
   color: var(--primary-color);
+  white-space: nowrap;
 }
 
-.tab-button.active {
-  color: var(--primary-color);
-  border-bottom: 3px solid var(--primary-color);
+/* Unknown mode must not look like a real one. */
+.flight-mode.unknown {
+  border-color: var(--border-color);
+  color: var(--muted-color);
 }
 
-.tab-pane.hidden {
-  display: none;
-}
+.telemetry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border-color); }
 
-/* --- Drones tab -------------------------------------------------------- */
-#drone-info-list {
-  padding: 16px 12px;
+.tm-field {
+  background: var(--raised-color);
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 3px;
 }
 
-.drone-empty {
-  color: var(--dark-gray-color);
-  text-align: center;
-  margin-top: 20px;
-  font-size: 16px;
-}
+.tm-label { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted-color); }
+.tm-value { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 14px; }
+.tm-value.ok   { color: var(--green-color); }
+.tm-value.warn { color: var(--red-color); }
 
-.drone-card {
-  border: 2px solid var(--border-color);
-  padding: 12px 14px;
-}
+.link-status { margin-top: 12px; font-size: 11px; color: var(--muted-color); }
+.link-status.online  { color: var(--green-color); }
+.link-status.offline { color: var(--red-color); }
 
-.drone-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-color);
-}
+/* --- commands --- */
+.cmd-group { margin-bottom: 18px; }
+.cmd-group:last-child { margin-bottom: 0; }
 
-.drone-name {
-  font-size: 18px;
-  color: var(--primary-color);
-}
-
-.drone-status {
-  font-size: 13px;
+.cmd-group-label {
+  display: block;
+  font-size: 10px;
   text-transform: uppercase;
-  padding: 2px 8px;
-  border: 1px solid currentColor;
+  letter-spacing: .08em;
+  color: var(--muted-color);
+  margin-bottom: 8px;
 }
 
-.status-active { color: var(--green-color); }
-.status-on_hold { color: #ffcc00; }
-.status-inactive { color: var(--primary-color); }
+.cmd-row { display: flex; gap: 8px; align-items: stretch; margin-top: 8px; }
+.cmd-row .button { flex: 1; }
 
-.drone-field {
+.button {
+  cursor: pointer;
+  font-size: 13px;
+  background: var(--raised-color);
+  color: var(--white-color);
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  transition: border-color 100ms linear, background 100ms linear;
+}
+
+.button:hover:not(:disabled) { border-color: var(--primary-color); background: #232b36; }
+.button:active:not(:disabled) { background: var(--primary-deep); border-color: var(--primary-deep); }
+.button:disabled { opacity: .4; cursor: not-allowed; }
+
+.button-danger:hover:not(:disabled) { border-color: var(--red-color); }
+.button-danger:active:not(:disabled) { background: var(--red-color); border-color: var(--red-color); }
+
+.button-run { color: var(--green-color); }
+.button-run:hover:not(:disabled) { border-color: var(--green-color); }
+
+.button-icon { width: auto; min-width: 36px; padding: 8px 10px; flex: none; }
+
+/* Armed click-to-fly: the map is now a control surface, so it has to be
+   unmistakable at a glance. */
+.button[aria-pressed="true"] {
+  background: var(--primary-deep);
+  border-color: var(--primary-color);
+  color: #fff;
+}
+.button[aria-pressed="true"]:hover { background: var(--primary-color); }
+
+.checkbox-row {
   display: flex;
-  justify-content: space-between;
-  font-size: 15px;
-  padding: 4px 0;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted-color);
+  cursor: pointer;
+}
+.checkbox-row input { accent-color: var(--primary-color); cursor: pointer; }
+
+.cmd-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--amber-color);
 }
 
-.drone-field span:first-child {
+.alt-input {
+  width: 64px;
+  background: var(--raised-color);
+  color: var(--white-color);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 8px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 13px;
+  text-align: right;
+  flex: none;
+}
+.alt-input:focus { outline: none; border-color: var(--primary-color); }
+.unit { align-self: center; font-size: 12px; color: var(--muted-color); flex: none; }
+
+/* --- mission panel --- */
+.mission-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.mission-bar .panel-title { margin-bottom: 0; margin-right: 6px; }
+.mission-bar .button { width: auto; flex: none; }
+
+.mission-sep { width: 1px; align-self: stretch; background: var(--border-color); margin: 0 4px; }
+
+input[type="file"] { display: none; }
+.upload-label { display: inline-flex; align-items: center; }
+.upload-filename {
+  font-size: 11px;
+  color: var(--muted-color);
+  font-family: ui-monospace, Consolas, monospace;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-script, .select-stream {
+  background: var(--raised-color);
+  color: var(--white-color);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 8px 10px;
+  min-height: 36px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.select-script { min-width: 190px; }
+.select-script:focus, .select-stream:focus { outline: none; border-color: var(--primary-color); }
+
+.mission-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted-color);
+}
+.mission-status .status-dot.running { background: var(--green-color); box-shadow: 0 0 8px rgba(61,220,132,.55); }
+
+/* --- collapsible mission output --- */
+.drawer { margin-top: 12px; border-top: var(--border-width) solid var(--border-color); padding-top: 10px; }
+
+.drawer-toggle {
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: var(--muted-color);
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 0;
+}
+.drawer-toggle:hover { color: var(--white-color); }
+.drawer-caret { display: inline-block; transition: transform 120ms linear; }
+.drawer-caret.open { transform: rotate(90deg); }
+
+.drawer-controls { display: inline-block; margin-left: 12px; }
+.drawer-controls .select-stream { min-height: 26px; padding: 3px 8px; font-size: 11px; }
+
+.drawer-body {
+  margin-top: 10px;
+  max-height: 220px;
+  overflow: auto;
+  background: var(--background-color);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 10px 12px;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--white-color);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.drawer-body.stream-err { color: var(--red-color); }
+
+/* --- toasts: command results, replacing the old raw JSON log pane --- */
+.toast-stack {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Leaflet stacks its panes at 400-700 and its controls at 800-1000, so a
+     lower value here would hide toasts behind the map. */
+  z-index: 1200;
+  max-width: 380px;
+}
+
+.toast {
+  background: var(--raised-color);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--primary-color);
+  border-radius: 3px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: 0 4px 16px rgba(0,0,0,.45);
+  animation: toast-in 140ms ease-out;
+}
+.toast.error { border-left-color: var(--red-color); }
+.toast.ok { border-left-color: var(--green-color); }
+.toast-title { font-weight: 600; margin-bottom: 2px; }
+.toast-body { color: var(--muted-color); word-break: break-word; }
+
+@keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+
+/* --- Leaflet, themed to match the panels ---------------------------------
+   Leaflet ships a light UI; these rules restyle its chrome only. Tiles are
+   left untouched. */
+
+.leaflet-container {
+  background: var(--background-color);   /* unloaded tiles read as intentional */
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.leaflet-bar,
+.leaflet-control-layers {
+  border: 1px solid var(--border-color) !important;
+  border-radius: 3px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .5) !important;
+}
+
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  background: var(--raised-color);
+  color: var(--white-color);
+  border-bottom-color: var(--border-color);
+}
+
+.leaflet-bar a:hover { background: #232b36; }
+
+.leaflet-bar a.leaflet-disabled {
+  background: var(--panel-color);
+  color: var(--dark-gray-color);
+}
+
+.leaflet-control-layers {
+  background: var(--raised-color);
   color: var(--white-color);
 }
 
-/* --- Log readability --------------------------------------------------- */
-.json-sent, .json-received {
-  font-family: monospace;
-  font-size: 14px;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border-color);
-  white-space: pre-wrap;
-  word-break: break-word;
-  line-height: 1.4;
+.leaflet-control-layers-expanded {
+  padding: 8px 12px 8px 8px;
+  background: var(--raised-color);
 }
 
-.json-sent {
-  color: var(--green-color);
+.leaflet-control-layers label { margin-bottom: 4px; cursor: pointer; }
+.leaflet-control-layers-separator { border-top-color: var(--border-color); }
+
+.leaflet-control-attribution {
+  background: rgba(18, 22, 28, .78) !important;
+  color: var(--muted-color);
+  padding: 2px 6px;
 }
+
+.leaflet-control-attribution a { color: var(--primary-color); }
